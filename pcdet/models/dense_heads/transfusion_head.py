@@ -62,11 +62,14 @@ class TransFusionHead(nn.Module):
         super(TransFusionHead, self).__init__()
 
         self.grid_size = grid_size
+        # print(self.grid_size)
         self.point_cloud_range = point_cloud_range
         self.voxel_size = voxel_size
-        self.num_classes = num_class
-
         self.model_cfg = model_cfg
+        self.num_classes = self.model_cfg.TARGET_ASSIGNER_CONFIG.get('NUM_CLASSES', 3)
+
+        # print("grid size: ", self.grid_size)
+        # print("point_cloud_range", self.point_cloud_range)
         self.feature_map_stride = self.model_cfg.TARGET_ASSIGNER_CONFIG.get('FEATURE_MAP_STRIDE', None)
         self.dataset_name = self.model_cfg.TARGET_ASSIGNER_CONFIG.get('DATASET', 'nuScenes')
 
@@ -95,7 +98,7 @@ class TransFusionHead(nn.Module):
         self.code_size = 10
 
         # a shared convolution
-        self.shared_conv = nn.Conv2d(in_channels=input_channels,out_channels=hidden_channel,kernel_size=3,padding=1)
+        self.shared_conv = nn.Conv2d(in_channels=128,out_channels=hidden_channel,kernel_size=3,padding=1)
         layers = []
         layers.append(BasicBlock2D(hidden_channel,hidden_channel, kernel_size=3,padding=1,bias=bias))
         layers.append(nn.Conv2d(in_channels=hidden_channel,out_channels=num_class,kernel_size=3,padding=1))
@@ -148,17 +151,26 @@ class TransFusionHead(nn.Module):
             if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
                 m.momentum = self.bn_momentum
 
-    def predict(self, inputs):
-        batch_size = inputs.shape[0]
-        lidar_feat = self.shared_conv(inputs)
 
-        lidar_feat_flatten = lidar_feat.view(
-            batch_size, lidar_feat.shape[1], -1
+    def forward(self, batch_dict):
+        img_feats = batch_dict['spatial_features']
+        batch_size = batch_dict['spatial_features_2d'].shape[0]
+        radar_feat = batch_dict['pillar_features_scattered']
+        fuse_feat = batch_dict['spatial_features_2d']
+        radar_feat = self.shared_conv(radar_feat) #[1, 128, 320, 320]
+
+
+        ### image to BEV ### 
+        radar_feat_flatten = radar_feat.view(
+            batch_size, radar_feat.shape[1], -1
         )
-        bev_pos = self.bev_pos.repeat(batch_size, 1, 1).to(lidar_feat.device)
+        
+        bev_pos = self.bev_pos.repeat(batch_size, 1, 1).to(radar_feat.device)
+        # print('bev_pos', bev_pos.shape) 
+
 
         # query initialization
-        dense_heatmap = self.heatmap_head(lidar_feat)
+        dense_heatmap = self.heatmap_head(radar_feat)
         heatmap = dense_heatmap.detach().sigmoid()
         padding = self.nms_kernel_size // 2
         local_max = torch.zeros_like(heatmap)
@@ -174,6 +186,11 @@ class TransFusionHead(nn.Module):
         elif self.dataset_name == "Waymo":
             local_max[ :, 1, ] = F.max_pool2d(heatmap[:, 1], kernel_size=1, stride=1, padding=0)
             local_max[ :, 2, ] = F.max_pool2d(heatmap[:, 2], kernel_size=1, stride=1, padding=0)
+
+        elif self.dataset_name == "VoD":
+            local_max[:, 1, ] = F.max_pool2d(heatmap[:, 1], kernel_size=1, stride=1, padding=0)
+            local_max[:, 2, ] = F.max_pool2d(heatmap[:, 2], kernel_size=1, stride=1, padding=0)
+
         heatmap = heatmap * (heatmap == local_max)
         heatmap = heatmap.view(batch_size, heatmap.shape[1], -1)
  
@@ -183,8 +200,8 @@ class TransFusionHead(nn.Module):
         ]
         top_proposals_class = top_proposals // heatmap.shape[-1]
         top_proposals_index = top_proposals % heatmap.shape[-1]
-        query_feat = lidar_feat_flatten.gather(
-            index=top_proposals_index[:, None, :].expand(-1, lidar_feat_flatten.shape[1], -1),
+        query_feat = radar_feat_flatten.gather(
+            index=top_proposals_index[:, None, :].expand(-1, radar_feat_flatten.shape[1], -1),
             dim=-1,
         )
         self.query_labels = top_proposals_class
@@ -196,7 +213,9 @@ class TransFusionHead(nn.Module):
         query_feat += query_cat_encoding
 
         query_pos = bev_pos.gather(
-            index=top_proposals_index[:, None, :].permute(0, 2, 1).expand(-1, -1, bev_pos.shape[-1]),
+            index=top_proposals_index[:, None, :]
+            .permute(0, 2, 1)
+            .expand(-1, -1, bev_pos.shape[-1]),
             dim=1,
         )
         # convert to xy
@@ -204,7 +223,7 @@ class TransFusionHead(nn.Module):
         bev_pos = bev_pos.flip(dims=[-1])
 
         query_feat = self.decoder(
-            query_feat, lidar_feat_flatten, query_pos, bev_pos
+            query_feat, radar_feat_flatten, query_pos, bev_pos
         )
         res_layer = self.prediction_head(query_feat)
         res_layer["center"] = res_layer["center"] + query_pos.permute(0, 2, 1)
@@ -216,21 +235,19 @@ class TransFusionHead(nn.Module):
         res_layer["dense_heatmap"] = dense_heatmap
 
         return res_layer
-
-    def forward(self, batch_dict):
-        feats = batch_dict['spatial_features_2d']
-        res = self.predict(feats)
-        if not self.training:
-            bboxes = self.get_bboxes(res)
-            batch_dict['final_box_dicts'] = bboxes
-        else:
-            gt_boxes = batch_dict['gt_boxes']
-            gt_bboxes_3d = gt_boxes[...,:-1]
-            gt_labels_3d =  gt_boxes[...,-1].long() - 1
-            loss, tb_dict = self.loss(gt_bboxes_3d, gt_labels_3d, res)
-            batch_dict['loss'] = loss
-            batch_dict['tb_dict'] = tb_dict
-        return batch_dict
+        # 여기 수정 필요
+        # res = self.predict(feats)
+        # if not self.training:
+        #     bboxes = self.get_bboxes(res)
+        #     batch_dict['final_box_dicts'] = bboxes
+        # else:
+        #     gt_boxes = batch_dict['gt_boxes']
+        #     gt_bboxes_3d = gt_boxes[...,:-1]
+        #     gt_labels_3d =  gt_boxes[...,-1].long() - 1
+        #     loss, tb_dict = self.loss(gt_bboxes_3d, gt_labels_3d, res)
+        #     batch_dict['loss'] = loss
+        #     batch_dict['tb_dict'] = tb_dict
+        # return batch_dict
 
     def get_targets(self, gt_bboxes_3d, gt_labels_3d, pred_dicts):
         assign_results = []
@@ -339,7 +356,7 @@ class TransFusionHead(nn.Module):
         mean_iou = ious[pos_inds].sum() / max(len(pos_inds), 1)
         return (labels[None], label_weights[None], bbox_targets[None], bbox_weights[None], int(pos_inds.shape[0]), float(mean_iou), heatmap[None])
 
-    def loss(self, gt_bboxes_3d, gt_labels_3d, pred_dicts, **kwargs):
+    def get_loss(self, gt_bboxes_3d, gt_labels_3d, pred_dicts, **kwargs):
 
         labels, label_weights, bbox_targets, bbox_weights, num_pos, matched_ious, heatmap = \
             self.get_targets(gt_bboxes_3d, gt_labels_3d, pred_dicts)
@@ -390,8 +407,8 @@ class TransFusionHead(nn.Module):
         targets[:, 2] = bboxes[:, 2]
         targets[:, 6] = torch.sin(bboxes[:, 6])
         targets[:, 7] = torch.cos(bboxes[:, 6])
-        if code_size == 10:
-            targets[:, 8:10] = bboxes[:, 7:]
+        # if code_size == 10:
+        #     targets[:, 8:10] = bboxes[:, 7:]
         return targets
 
     def decode_bbox(self, heatmap, rot, dim, center, height, vel, filter=False):

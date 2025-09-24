@@ -65,7 +65,8 @@ class FrustumGridGenerator(nn.Module):
         self.bev_aug = bev_aug
 
         # Calculate voxel size
-        pc_range = torch.as_tensor(pc_range).reshape(2, 3)
+        #pc_range = torch.as_tensor(pc_range).reshape(2, 3)
+        pc_range = torch.tensor(pc_range.reshape(2, 3), dtype=torch.float32)
         self.pc_min = pc_range[0]
         self.pc_max = pc_range[1]
         self.voxel_size = (self.pc_max - self.pc_min) / self.grid_size

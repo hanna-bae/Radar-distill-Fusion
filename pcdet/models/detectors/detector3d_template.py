@@ -220,6 +220,18 @@ class Detector3DTemplate(nn.Module):
     def build_dense_head(self, model_info_dict):
         if self.model_cfg.get('DENSE_HEAD', None) is None:
             return None, model_info_dict
+        
+        if self.model_cfg.get('DENSE_HEAD', None) == 'TransFusionHead':
+            dense_head_module = dense_heads.__all__[self.model_cfg.DENSE_HEAD.NAME](
+            model_cfg=self.model_cfg.DENSE_HEAD,
+            input_channels= 128, 
+            num_class=self.num_class if not self.model_cfg.DENSE_HEAD.CLASS_AGNOSTIC else 1,
+            class_names=self.class_names,
+            grid_size= 1280,
+            point_cloud_range=model_info_dict['point_cloud_range'],
+            predict_boxes_when_training=self.model_cfg.get('ROI_HEAD', False),
+            voxel_size=model_info_dict.get('voxel_size', False)
+        )
         dense_head_module = dense_heads.__all__[self.model_cfg.DENSE_HEAD.NAME](
             model_cfg=self.model_cfg.DENSE_HEAD,
             input_channels=model_info_dict['num_bev_features'] if 'num_bev_features' in model_info_dict else self.model_cfg.DENSE_HEAD.INPUT_FEATURES,
@@ -231,6 +243,7 @@ class Detector3DTemplate(nn.Module):
             voxel_size=model_info_dict.get('voxel_size', False)
         )
         model_info_dict['module_list'].append(dense_head_module)
+
         return dense_head_module, model_info_dict
 
     def build_point_head(self, model_info_dict):

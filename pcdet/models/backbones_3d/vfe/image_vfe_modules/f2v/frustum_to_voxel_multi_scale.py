@@ -84,6 +84,8 @@ class FrustumToVoxelMultiScale(nn.Module):
             batch_dict.pop('frustum_features')
         else:
             voxel_features = []
+            #features_ = batch_dict['features']
+            #print('image feature size', features_.shape)
             for i in range(self.feature_num):
                 B, C, W, H = batch_dict["features"][i].shape
                 voxel_features.append(self.sampler(input_features=batch_dict["features"][i].reshape([B, C, 1, W, H]), 

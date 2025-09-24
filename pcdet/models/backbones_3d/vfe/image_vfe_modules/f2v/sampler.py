@@ -33,5 +33,23 @@ class Sampler(nn.Module):
             output_features: (B, C, X, Y, Z) Output voxel features
         """
         # Sample from grid
-        output = self.grid_sample(input=input_features, grid=grid, mode=self.mode, padding_mode=self.padding_mode)
+        #output = self.grid_sample(input=input_features, grid=grid, mode=self.mode, padding_mode=self.padding_mode)
+        if torch.is_autocast_enabled() and input_features.dtype in (torch.float16, torch.bfloat16):
+            if grid.dtype != input_features.dtype:
+                grid = grid.to(dtype=input_features.dtype)
+        else:
+            # autocast off일 땐 둘 다 fp32로 맞춤
+            if input_features.dtype != torch.float32:
+                input_features = input_features.float()
+            if grid.dtype != torch.float32:
+                grid = grid.float()
+
+        # --- autocast 컨텍스트에서 grid_sample 실행 ---
+        with torch.cuda.amp.autocast(enabled=torch.is_autocast_enabled()):
+            output = self.grid_sample(
+                input=input_features.contiguous(),
+                grid=grid.contiguous(),
+                mode=self.mode,
+                padding_mode=self.padding_mode
+          )
         return output

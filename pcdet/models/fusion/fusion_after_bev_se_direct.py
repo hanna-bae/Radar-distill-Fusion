@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import os
+import numpy as np
 
 class SE_Block(nn.Module):
     def __init__(self, c):
@@ -46,7 +48,25 @@ class FusionAfterBEVSEDirect(nn.Module):
     def forward(self, batch_dict):
         image_features = batch_dict["spatial_features"] # [B, 128, 320, 320]
         radar_features = batch_dict['pillar_features_scattered'] # [B, 128, 160, 160]
-
+    
+        # Radar BEV feature 추출
+        # radar_bev = batch_dict.get('pillar_features_scattered', None)  # shape: (B, C, H, W)
+        # frame_ids = batch_dict.get('frame_id', None)  # list of strings (e.g., '000123')
+        # img_bev = batch_dict.get('spatial_features', None)
+        # if radar_features is not None and frame_ids is not None:
+        #     for b in range(radar_features.shape[0]):
+        #         frame_id = str(frame_ids[b])
+        #         feature = radar_features[b].cpu().numpy()  # (C, H, W)
+        #         save_path = os.path.join('vod/radar_bev', f'{frame_id}.npy')
+        #         np.save(save_path, feature)
+        #         #print('save', save_path)
+        # if image_features is not None and frame_ids is not None: 
+        #     for b in range(image_features.shape[0]):
+        #         frame_id = str(frame_ids[b])
+        #         img_feature = image_features[b].cpu().numpy()
+        #         save_path = os.path.join('vod/img_bev', f'{frame_id}.npy')
+        #         np.save(save_path, img_feature)
+        #if features is 
         if image_features.shape[-2:] != radar_features.shape[-2:]:
             image_features = F.interpolate(image_features, radar_features.shape[-2:], mode='bilinear') # [B, 128, 160, 160]
 

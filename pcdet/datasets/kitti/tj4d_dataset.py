@@ -78,14 +78,15 @@ class TJ4DDataset(DatasetTemplate):
 
     def get_lidar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
-        assert lidar_file.exists()
+        #print(lidar_file)
+        #assert lidar_file.exists()
         number_of_channels = 8  # ['x', 'y', 'z', 'V_r', 'Range', 'Power', 'Alpha', 'Beta']
         points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, number_of_channels)
         return points
     
     def get_virtual_point(self, idx):
         lidar_file = self.root_split_path / self.virtual_prefix / ('%s.pkl.npy' % idx)
-        assert lidar_file.exists()
+        #assert lidar_file.exists()
         points = np.load(str(lidar_file), allow_pickle=True).item()
         virtual_points = points['virtual_points']
         gt_real_points = points['real_points']
@@ -114,6 +115,7 @@ class TJ4DDataset(DatasetTemplate):
 
     def get_label(self, idx):
         label_file = self.root_split_path / 'label_2' / ('%s.txt' % idx)
+        #print(label_file)
         assert label_file.exists()
         return object3d_kitti.get_objects_from_label(label_file)
 

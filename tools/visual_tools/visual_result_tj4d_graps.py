@@ -14,7 +14,7 @@ from tqdm import tqdm
 data_root = Path('./data/tj4d/')
 save_path = './visual_result/tj4d_graps/'
 infos = np.load(data_root / 'kitti_infos_val.pkl', allow_pickle=True)
-det_result = np.load('./output/tools/cfgs/experiments/tj4d_1gauss_4uniform/default/eval/epoch_34/val/default/result.pkl', allow_pickle=True)
+det_result = np.load('./output/tools/cfgs/hgsfusion/hgsfusion_tj4d/default/eval/epoch_4/val/default/result.pkl', allow_pickle=True)
 classes = ['Car', 'Pedestrian', 'Cyclist', 'Truck']
 
 def get_image(idx):
@@ -176,156 +176,156 @@ def plot_gt_3d(gt_boxes, lidar2cam, cam2img, colors):
 idxes = list(range(0, 2040, 10))
 idxes = list(range(0, 300, 3))
 
-for i, idx in tqdm(enumerate(idxes)):
+#for i, idx in tqdm(enumerate(idxes)):
     
-    # if i > 100:
-    #     break
-    # print(i)
-    # idx = 560 # normal
-    idx = 1590 # shiny
-    # idx = 198 # dark
-    gt, dt = infos[idx], det_result[idx]
-    frame_id = gt['image']['image_idx']
-    img = get_image(frame_id)
-    pts = get_lidar(frame_id)
-    calib = get_calib(frame_id)
-    vp = get_virtual_point(frame_id)
+# if i > 100:
+#     break
+# print(i)
+# idx = 560 # normal
+idx = 1590 # shiny
+# idx = 198 # dark
+gt, dt = infos[idx], det_result[idx]
+frame_id = gt['image']['image_idx']
+img = get_image(frame_id)
+pts = get_lidar(frame_id)
+calib = get_calib(frame_id)
+vp = get_virtual_point(frame_id)
 
-    # plot gt in image
-    annos = gt['annos']
-    annos = common_utils.drop_info_with_name(annos, name='DontCare')
-    mask = []
-    colors = []
-    for name, num_pts in zip(annos['name'], annos['num_points_in_gt']):
-        if num_pts > 0 and name in classes:
-            mask.append(True)
-            colors.append([151/255, 248/255, 146/255])
-        else:
-            mask.append(False)
-        # if name == 'Car':
-        #     colors.append([0.494, 0.184, 0.556])
-        # elif name == 'Pedestrian':
-        #     colors.append([0.000, 0.667, 0.500])
-        # elif name == 'Cyclist':
-        #     colors.append([173/255, 216/255, 230/255])
-        # elif name == 'Truck':
-        #     colors.append([193/255, 154/255, 58/255])
+# plot gt in image
+annos = gt['annos']
+annos = common_utils.drop_info_with_name(annos, name='DontCare')
+mask = []
+colors = []
+for name, num_pts in zip(annos['name'], annos['num_points_in_gt']):
+    if num_pts > 0 and name in classes:
+        mask.append(True)
+        colors.append([151/255, 248/255, 146/255])
+    else:
+        mask.append(False)
+    if name == 'Car':
+        colors.append([0.494, 0.184, 0.556])
+    elif name == 'Pedestrian':
+        colors.append([0.000, 0.667, 0.500])
+    elif name == 'Cyclist':
+        colors.append([173/255, 216/255, 230/255])
+    elif name == 'Truck':
+        colors.append([193/255, 154/255, 58/255])
 
-    loc, dims, rots = annos['location'][mask], annos['dimensions'][mask], annos['rotation_y'][mask]
-    gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
-    gt_boxes = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-    trans_lidar_to_cam, trans_cam_to_img = kitti_utils.calib_to_matricies(calib)
+loc, dims, rots = annos['location'][mask], annos['dimensions'][mask], annos['rotation_y'][mask]
+gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
+gt_boxes = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
+trans_lidar_to_cam, trans_cam_to_img = kitti_utils.calib_to_matricies(calib)
 
-    pcr_mask = gt_boxes[:, 0] < 69.12
-    colors_new = []
-    for fuck in pcr_mask:
-        if fuck:
-            colors_new.append(colors[i])
+pcr_mask = gt_boxes[:, 0] < 69.12
+# colors_new = []
+# for fuck in pcr_mask:
+#     if fuck:
+#         colors_new.append(colors[idx-1])
 
-    plt.clf()
-    fig, ax = plt.subplots(dpi=500)
-    plot_gt_3d(gt_boxes[pcr_mask], trans_lidar_to_cam, trans_cam_to_img, colors_new) # TODO
-    plt.imshow(img)
-    plt.axis('off')
-    plt.savefig(save_path + (f"/{frame_id}_3d_gt.png"), bbox_inches='tight', pad_inches=0)
-    plt.close()
+plt.clf()
+fig, ax = plt.subplots(dpi=500)
+#plot_gt_3d(gt_boxes[pcr_mask], trans_lidar_to_cam, trans_cam_to_img, colors_new) # TODO
+plt.imshow(img)
+plt.axis('off')
+plt.savefig(save_path + (f"/{frame_id}_3d_gt.png"), bbox_inches='tight', pad_inches=0)
+plt.close()
 
-    # plot gt in bev
-    plt.clf()
-    fig, ax = plt.subplots(dpi=500)
-    gca = plt.gca()
-    gca.set_xlim(0, 69.12)
-    gca.set_ylim(-39.68, 39.68)
+# plot gt in bev
+plt.clf()
+fig, ax = plt.subplots(dpi=500)
+gca = plt.gca()
+gca.set_xlim(0, 69.12)
+gca.set_ylim(-39.68, 39.68)
 
-    x, y = pts[:, 0], pts[:, 1]
-    for i in range(len(x)):
-        circle = plt.Circle([x[i], y[i]], .2, facecolor=[92/255,156/255,255/255])
-        ax.add_artist(circle)
-        stroke_effect = [pe.Stroke(linewidth=1, foreground='black'), pe.Normal()]
-        circle.set_path_effects(stroke_effect)
+x, y = pts[:, 0], pts[:, 1]
+for i in range(len(x)):
+    circle = plt.Circle([x[i], y[i]], .2, facecolor=[92/255,156/255,255/255])
+    ax.add_artist(circle)
+    stroke_effect = [pe.Stroke(linewidth=1, foreground='black'), pe.Normal()]
+    circle.set_path_effects(stroke_effect)
 
-    x, y = vp[:, 0], vp[:, 1]
-    for i in range(len(x)):
-        # circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
-        circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
-        ax.add_artist(circle)
-        stroke_effect = [pe.Stroke(linewidth=0.5, foreground='black'), pe.Normal()]
-        circle.set_path_effects(stroke_effect)
+x, y = vp[:, 0], vp[:, 1]
+for i in range(len(x)):
+    # circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
+    circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
+    ax.add_artist(circle)
+    stroke_effect = [pe.Stroke(linewidth=0.5, foreground='black'), pe.Normal()]
+    circle.set_path_effects(stroke_effect)
 
 
-    mask_bbox = gt['annos']['num_points_in_gt'][mask] > 0
-    plot_gt_bev(gt_boxes[mask_bbox])
+mask_bbox = gt['annos']['num_points_in_gt'][mask] > 0
+plot_gt_bev(gt_boxes[mask_bbox])
 
-    plt.axis('off')
-    plt.savefig(save_path + (f"/{frame_id}_bev_gt.png"))
-    plt.close()
+plt.axis('off')
+plt.savefig(save_path + (f"/{frame_id}_bev_gt.png"))
+plt.close()
 
-    # plot dt in image
-    annos = dt
-    if 'frame_id' in annos:
-        annos.pop('frame_id')
-    annos = common_utils.drop_info_with_name(annos, name='DontCare')
-    mask = []
-    colors = []
-    # threshold = 0.2 # normal
-    threshold = 0.4 # shiny
-    # threshold = 0.2 # dark
-    for name, conf in zip(annos['name'], annos['score']):
-        if conf > threshold:
-            mask.append(name in classes)
-            if name == 'Car':
-                colors.append([0.494, 0.184, 0.556])
-            elif name == 'Pedestrian':
-                colors.append([0.000, 0.667, 0.500])
-            elif name == 'Cyclist':
-                colors.append([173/255, 216/255, 230/255])
-            elif name == 'Truck':
-                colors.append([193/255, 154/255, 58/255])
-        else:
-            mask.append(False)
+# plot dt in image
+annos = dt
+if 'frame_id' in annos:
+    annos.pop('frame_id')
+annos = common_utils.drop_info_with_name(annos, name='DontCare')
+mask = []
+colors = []
+# threshold = 0.2 # normal
+threshold = 0.4 # shiny
+# threshold = 0.2 # dark
+for name, conf in zip(annos['name'], annos['score']):
+    if conf > threshold:
+        mask.append(name in classes)
+        if name == 'Car':
+            colors.append([0.494, 0.184, 0.556])
+        elif name == 'Pedestrian':
+            colors.append([0.000, 0.667, 0.500])
+        elif name == 'Cyclist':
+            colors.append([173/255, 216/255, 230/255])
+        elif name == 'Truck':
+            colors.append([193/255, 154/255, 58/255])
+    else:
+        mask.append(False)
 
-    loc, dims, rots = annos['location'][mask], annos['dimensions'][mask], annos['rotation_y'][mask]
-    gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
-    gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-    trans_lidar_to_cam, trans_cam_to_img = kitti_utils.calib_to_matricies(calib)
+loc, dims, rots = annos['location'][mask], annos['dimensions'][mask], annos['rotation_y'][mask]
+gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
+gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
+trans_lidar_to_cam, trans_cam_to_img = kitti_utils.calib_to_matricies(calib)
 
-    plt.clf()
-    fig, ax = plt.subplots(dpi=500)
-    plot_gt_3d(gt_boxes_lidar, trans_lidar_to_cam, trans_cam_to_img, colors) # TODO
-    plt.imshow(img)
-    plt.axis('off')
-    plt.savefig(save_path + (f"/{frame_id}_3d_dt.png"), bbox_inches='tight', pad_inches=0)
-    plt.close()
+plt.clf()
+fig, ax = plt.subplots(dpi=500)
+plot_gt_3d(gt_boxes_lidar, trans_lidar_to_cam, trans_cam_to_img, colors) # TODO
+plt.imshow(img)
+plt.axis('off')
+plt.savefig(save_path + (f"/{frame_id}_3d_dt.png"), bbox_inches='tight', pad_inches=0)
+plt.close()
 
-    # plot dt and gt in bev
-    plt.clf()
-    fig, ax = plt.subplots(dpi=500)
-    gca = plt.gca()
-    gca.set_xlim(0, 69.12)
-    gca.set_ylim(-39.68, 39.68)
+# plot dt and gt in bev
+plt.clf()
+fig, ax = plt.subplots(dpi=500)
+gca = plt.gca()
+gca.set_xlim(0, 69.12)
+gca.set_ylim(-39.68, 39.68)
 
-    x, y = pts[:, 0], pts[:, 1]
-    for i in range(len(x)):
-        circle = plt.Circle([x[i], y[i]], .2, facecolor=[92/255,156/255,255/255])
-        ax.add_artist(circle)
-        stroke_effect = [pe.Stroke(linewidth=1, foreground='black'), pe.Normal()]
-        circle.set_path_effects(stroke_effect)
+x, y = pts[:, 0], pts[:, 1]
+for i in range(len(x)):
+    circle = plt.Circle([x[i], y[i]], .2, facecolor=[92/255,156/255,255/255])
+    ax.add_artist(circle)
+    stroke_effect = [pe.Stroke(linewidth=1, foreground='black'), pe.Normal()]
+    circle.set_path_effects(stroke_effect)
 
-    x, y = vp[:, 0], vp[:, 1]
-    for i in range(len(x)):
-        if x[i] > 30 and random.random() > 0.02:
-            continue
-        circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
-        ax.add_artist(circle)
-        stroke_effect = [pe.Stroke(linewidth=0.5, foreground='black'), pe.Normal()]
-        circle.set_path_effects(stroke_effect)
+x, y = vp[:, 0], vp[:, 1]
+for i in range(len(x)):
+    if x[i] > 30 and random.random() > 0.02:
+        continue
+    circle = plt.Circle([x[i], y[i]], .2, facecolor=[248/255,203/255,173/255])
+    ax.add_artist(circle)
+    stroke_effect = [pe.Stroke(linewidth=0.5, foreground='black'), pe.Normal()]
+    circle.set_path_effects(stroke_effect)
 
-    plot_gt_bev(gt_boxes[mask_bbox], color=[63/255, 242/255, 54/255],
-                facecolor=np.array([63/255, 242/255, 54/255, 0.5]))
-    plot_gt_bev(gt_boxes_lidar)
+plot_gt_bev(gt_boxes[mask_bbox], color=[63/255, 242/255, 54/255],
+            facecolor=np.array([63/255, 242/255, 54/255, 0.5]))
+plot_gt_bev(gt_boxes_lidar)
 
-    plt.axis('off')
-    plt.savefig(save_path + (f"/{frame_id}_bev_dt.png"))
-    plt.close()
+plt.axis('off')
+plt.savefig(save_path + (f"/{frame_id}_bev_dt.png"))
+plt.close()
 
-    pass
+pass

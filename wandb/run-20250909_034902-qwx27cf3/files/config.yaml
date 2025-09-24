@@ -1,0 +1,98 @@
+_wandb:
+    value:
+        cli_version: 0.21.3
+        e:
+            8hb7eq1nwxgsttswbnebdh62blaemaev:
+                args:
+                    - --cfg_file
+                    - ./tools/cfgs/hgsfusion/hgsfusion_vod_depth.yaml
+                    - --extra_tag
+                    - 1gpu_safe
+                    - --bn
+                    - gn
+                    - --gn_groups
+                    - "32"
+                    - --batch_size
+                    - "1"
+                    - --accum_steps
+                    - "4"
+                    - --use_amp
+                    - --use_wandb
+                    - --wandb_watch
+                    - none
+                codePath: tools/train_new.py
+                codePathLocal: tools/train_new.py
+                cpu_count: 16
+                cpu_count_logical: 16
+                cudaVersion: "12.4"
+                disk:
+                    /:
+                        total: "1827341189120"
+                        used: "1414908047360"
+                email: kaist.hannabae@gmail.com
+                executable: /usr/bin/python
+                git:
+                    remote: https://github.com/garfield-cpp/HGSFusion.git
+                gpu: NVIDIA GeForce RTX 3090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-abb81c71-cfaf-bbfe-ce55-6c7b211c8533
+                host: 3ed8fa15eb42
+                memory:
+                    total: "94902366208"
+                os: Linux-5.15.0-124-generic-x86_64-with-glibc2.31
+                program: /root/workspace/tools/train_new.py
+                python: CPython 3.9.5
+                root: /root/workspace
+                startedAt: "2025-09-09T03:49:02.493901Z"
+                writerId: 8hb7eq1nwxgsttswbnebdh62blaemaev
+        m: []
+        python_version: 3.9.5
+        t:
+            "1":
+                - 1
+                - 37
+                - 38
+                - 41
+                - 79
+                - 82
+            "2":
+                - 1
+                - 37
+                - 38
+                - 41
+                - 79
+                - 82
+            "3":
+                - 13
+                - 61
+            "4": 3.9.5
+            "5": 0.21.3
+            "12": 0.21.3
+            "13": linux-x86_64
+accum_steps:
+    value: 4
+batch_size_per_gpu:
+    value: 1
+bn_mode:
+    value: gn
+epochs:
+    value: 25
+exp_group_path:
+    value: tools/cfgs/hgsfusion
+extra_tag:
+    value: 1gpu_safe
+gn_groups:
+    value: 32
+precise_bn:
+    value: false
+precise_bn_iters:
+    value: 512
+tag:
+    value: hgsfusion_vod_depth
+workers:
+    value: 4

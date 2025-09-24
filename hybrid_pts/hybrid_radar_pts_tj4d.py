@@ -385,7 +385,7 @@ def process_one_frame(info, predictor, data, num_camera=1):
     masks = [] 
     labels = [] 
     camera_ids = torch.arange(6, dtype=torch.float32, device='cuda:0').reshape(6, 1, 1)
-
+    # semantic mask
     result = predictor.model(data[1:])
 
     for camera_id in range(num_camera):

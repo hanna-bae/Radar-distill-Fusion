@@ -4,13 +4,15 @@ import time
 import numpy as np
 import torch
 import tqdm
-
+import os
 from copy import deepcopy
 from functools import partial
 from pcdet.models import load_data_to_gpu
 from pcdet.utils import common_utils
 from pcdet.datasets.augmentor.data_augmentor import DataAugmentor, augmentor_utils
 from pcdet.utils.calibration_kitti import Calibration
+
+
 
 class TTA():
     def __init__(self):
@@ -356,6 +358,25 @@ def eval_one_epoch(cfg, args, model, dataloader, epoch_id, logger, dist_test=Fal
 
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)
+
+            # # Radar BEV feature 추출
+            # radar_bev = batch_dict.get('pillar_features_scattered', None)  # shape: (B, C, H, W)
+            # frame_ids = batch_dict.get('frame_id', None)  # list of strings (e.g., '000123')
+            # img_bev = batch_dict.get('spatial_features', None)
+            # # if radar_bev is not None and frame_ids is not None:
+            # #     for b in range(radar_bev.shape[0]):
+            # #         frame_id = str(frame_ids[b])
+            # #         feature = radar_bev[b].cpu().numpy()  # (C, H, W)
+            # #         save_path = os.path.join('radar_bev', f'{frame_id}.npy')
+            # #         np.save(save_path, feature)
+            # if img_bev is not None and frame_ids is not None: 
+            #     for b in range(img_bev.shape[0]):
+            #         frame_id = str(frame_ids[b])
+            #         img_feature = img_bev[b].cpu().numpy()
+            #         save_path = os.path.join('img_bev', f'{frame_id}.npy')
+            #         np.save(save_path, img_feature)
+
+
 
         disp_dict = {}
 

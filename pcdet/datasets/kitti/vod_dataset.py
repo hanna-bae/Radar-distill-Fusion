@@ -37,7 +37,7 @@ class VODDataset(DatasetTemplate):
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
         self.use_radar_points = self.dataset_cfg.USE_RADAR_POINTS
         self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
-
+        print(self.root_split_path)
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
@@ -52,8 +52,10 @@ class VODDataset(DatasetTemplate):
         src_feature_index = {name:index for index, name in enumerate(self.src_feature_list)}
         self.used_feature_index = [src_feature_index[name] for name in self.used_feature_list]
         self.use_virtual_points = self.dataset_cfg.get('USE_VIRTUAL_POINTS', False)
-        self.virtual_prefix = self.dataset_cfg.get('VIRTUAL_POINT_PREFIX', 'mask')
+        self.virtual_prefix = self.dataset_cfg.get('VIRTUAL_POINT_PREFIX', 'region_growing_points')
         self.no_dup = self.dataset_cfg.get('NO_DUP', False)
+        print(self.virtual_prefix)
+
 
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -500,8 +502,10 @@ class VODDataset(DatasetTemplate):
                 virtual_points, gt_real_points = self.get_virtual_point(sample_idx) # xyz_3 + feat_4 + label_8
                 # virtual_points = np.concatenate([virtual_points[:, :3], virtual_points[:, -4:], virtual_points[:, 3:11]], axis=1)
                 real_points = self.get_lidar(sample_idx)
-                # print(f"virtual: {virtual_points.shape[0]} gt:{gt_real_points.shape[0]} real:{real_points.shape[0]}")
+                #print(f"virtual: {virtual_points.shape[0]} gt:{gt_real_points.shape[0]} real:{real_points.shape[0]}")
                 points = np.ones([virtual_points.shape[0] + real_points.shape[0] + gt_real_points.shape[0], virtual_points.shape[1] + 2])
+                #print(points.shape)
+                
                 # 1, 1: 真实点; 0, 0: gt框内的真实点; 0, 1: virtual 点
 
                 if len(gt_real_points) == 0:
@@ -519,6 +523,7 @@ class VODDataset(DatasetTemplate):
                     points[real_points.shape[0]:, -2] = 0
                     points[real_points.shape[0]:, -1] = 0
                     points[-virtual_points.shape[0]:, -1] = 1
+                    #print(points.shape)
             else:
                 points = self.get_lidar(sample_idx)
             if self.dataset_cfg.FOV_POINTS_ONLY:

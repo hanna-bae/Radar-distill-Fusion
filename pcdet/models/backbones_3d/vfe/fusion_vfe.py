@@ -5,21 +5,21 @@ from .vfe_template import VFETemplate
 from .image_vfe_modules import ffn, f2v
 from .image_vfe import ImageVFE
 from .pillar_vfe import Radar7PillarVFE
-from .feature_sampler import GaussianSampler
+#from .feature_sampler import GaussianSampler
 from .simple_sampler import SimpleSampler
 from .radar_occupancy import RadarOccupancy
-from .radar_occupancy_2d import RadarOccupancy2D
+#from .radar_occupancy_2d import RadarOccupancy2D
 from .radar_occupancy_2d_v2 import RadarOccupancy2DV2
-from .foreground_sampler import ForegroundSampler
+#from .foreground_sampler import ForegroundSampler
 
 radar_occupancy = {
     'RadarOccupancy': RadarOccupancy,
-    'RadarOccupancy2D': RadarOccupancy2D,
+    #'RadarOccupancy2D': RadarOccupancy2D,
     'RadarOccupancy2DV2': RadarOccupancy2DV2
 }
 
 feature_sampler = {
-    'GaussianSampler': GaussianSampler,
+    #'GaussianSampler': GaussianSampler,
     'SimpleSampler': SimpleSampler,
 }
 

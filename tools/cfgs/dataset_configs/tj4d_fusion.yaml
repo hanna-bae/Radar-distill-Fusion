@@ -1,6 +1,7 @@
 DATASET: 'TJ4DDataset'
 # DATA_PATH: '../data/kitti'
-DATA_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
+#DATA_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
+DATA_PATH: './data/tj4d'
 
 POINT_CLOUD_RANGE: [0, -39.68, -4, 69.12, 39.68, 2]
 
@@ -10,8 +11,10 @@ DATA_SPLIT: {
 }
 
 USE_RADAR_POINTS: True
-DATA_LIDAR_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
-DATA_RADAR_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
+# DATA_LIDAR_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
+# DATA_RADAR_PATH: '/media/yellowstone/databig/code/OpenPCDet_VoD_new/data/tj4d'
+DATA_LIDAR_PATH: './data/tj4d'
+DATA_RADAR_PATH: './data/tj4d'
 
 INFO_PATH: {
     'train': [kitti_infos_train.pkl],

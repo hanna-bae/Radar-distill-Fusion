@@ -43,7 +43,7 @@ class CaDDN(Detector3DTemplate):
 
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss()
-
+            #loss_all, lost_dict = self.get_trainint_loss()
             ret_dict = {
                 'loss': loss
             }

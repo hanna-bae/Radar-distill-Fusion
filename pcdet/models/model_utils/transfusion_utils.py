@@ -12,7 +12,7 @@ class PositionEmbeddingLearned(nn.Module):
     Absolute pos embedding, learned.
     """
 
-    def __init__(self, input_channel, num_pos_feats=288):
+    def __init__(self, input_channel, num_pos_feats=200):
         super().__init__()
         self.position_embedding_head = nn.Sequential(
             nn.Conv1d(input_channel, num_pos_feats, kernel_size=1),
@@ -22,6 +22,7 @@ class PositionEmbeddingLearned(nn.Module):
 
     def forward(self, xyz):
         xyz = xyz.transpose(1, 2).contiguous()
+        #print('xyz.shape', xyz.shape)
         position_embedding = self.position_embedding_head(xyz)
         return position_embedding
 
@@ -62,12 +63,16 @@ class TransformerDecoderLayer(nn.Module):
         self.cross_posembed = cross_posembed
 
     def with_pos_embed(self, tensor, pos_embed):
+        print("tensor shape: ", tensor.shape)
+        print("pos_embed shape: ", pos_embed.shape)
         return tensor if pos_embed is None else tensor + pos_embed
 
     def forward(self, query, key, query_pos, key_pos, key_padding_mask=None, attn_mask=None):
         # NxCxP to PxNxC
+        #print('query_pos.shape', query_pos.shape) #[1, 200, 2]
         if self.self_posembed is not None:
             query_pos_embed = self.self_posembed(query_pos).permute(2, 0, 1)
+            #query_pos_embed = self.self_posembed(query_pos.permute(0, 2, 1))        
         else:
             query_pos_embed = None
         if self.cross_posembed is not None:
@@ -80,6 +85,7 @@ class TransformerDecoderLayer(nn.Module):
 
         if not self.cross_only:
             q = k = v = self.with_pos_embed(query, query_pos_embed)
+            print("q, k, v", q.shape, k.shape, v.shape)
             query2 = self.self_attn(q, k, value=v)[0]
             query = query + self.dropout1(query2)
             query = self.norm1(query)
