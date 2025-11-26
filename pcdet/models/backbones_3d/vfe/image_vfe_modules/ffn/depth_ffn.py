@@ -2,6 +2,8 @@ import torch
 import math
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt 
+import numpy as np 
 
 from . import ddn, ddn_loss
 from pcdet.models.model_utils.basic_block_2d import BasicBlock2D
@@ -55,7 +57,7 @@ class DepthFFN(nn.Module):
         )
         self.forward_ret_dict = {}
         self.use_foreground = self.model_cfg.get('FOREGROUND_MASK', False)
-
+    
     def get_output_feature_dim(self):
         if self.use_multi_scale_features:
             return sum([x.out_channels for x in self.channel_reduce])
@@ -157,14 +159,20 @@ class DepthFFN(nn.Module):
                 batch_dict["frustum_features"] = frustum_features
         else:
             batch_dict["features"] = image_features
-            
+        if not self.training:
+            if self.use_depth:
+                batch_dict["depth_logits"] = depth_logits.detach().cpu()   
         if self.training:
             if self.use_depth:
                 self.forward_ret_dict["depth_maps"] = batch_dict["depth_maps"]
                 self.forward_ret_dict["gt_boxes2d"] = batch_dict["gt_boxes2d"]
                 self.forward_ret_dict["depth_logits"] = depth_logits
+                #self.save_depth_map(depth_logits)
+        
         return batch_dict
 
+
+    
     def create_frustum_features(self, image_features, depth_logits):
         """
         Create image depth feature volume by multiplying image features with depth distributions

@@ -15,6 +15,7 @@ from .once.once_dataset import ONCEDataset
 from .argo2.argo2_dataset import Argo2Dataset
 from .custom.custom_dataset import CustomDataset
 from pcdet.datasets.kitti.vod_dataset import VODDataset
+from pcdet.datasets.kitti.vod_dataset_noise import VODNDataset
 from .kitti.tj4d_dataset import TJ4DDataset
 
 __all__ = {
@@ -28,7 +29,8 @@ __all__ = {
     'CustomDataset': CustomDataset,
     'Argo2Dataset': Argo2Dataset,
     'VODDataset': VODDataset,
-    'TJ4DDataset': TJ4DDataset
+    'TJ4DDataset': TJ4DDataset,
+    'VODNDataset': VODNDataset
 }
 
 

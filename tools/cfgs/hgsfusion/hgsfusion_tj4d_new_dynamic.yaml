@@ -10,7 +10,7 @@ DATA_CONFIG:
     GET_ITEM_LIST: ["points", "images", "calib_matricies", "gt_boxes2d"]
     USE_VIRTUAL_POINTS: True
     #VIRTUAL_POINT_PREFIX: 'mask_maskformer_with_label_k_1_gauss_k_4_uniform'
-    VIRTUAL_POINT_PREFIX: 'region_growing_points'
+    VIRTUAL_POINT_PREFIX: 'region_growing_points_dynamic'
 
     
     POINT_FEATURE_ENCODING: {

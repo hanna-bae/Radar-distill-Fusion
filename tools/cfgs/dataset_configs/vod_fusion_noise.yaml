@@ -1,4 +1,4 @@
-DATASET: 'VODDataset'
+DATASET: 'VODNDataset'
 # DATA_PATH: '../data/kitti'
 DATA_PATH: './data/vod_radar_5frames'
 
@@ -15,8 +15,9 @@ DATA_LIDAR_PATH: './data/vod_lidar'
 DATA_RADAR_PATH: './data/vod_radar_5frames'
 
 INFO_PATH: {
-    'train' : [kitti_infos_train.pkl],
-    'test' : [kitti_infos_val.pkl]
+    'train': [kitti_infos_noise_train.pkl],
+    'test': [kitti_infos_noise_val.pkl],
+
 }
 
 GET_ITEM_LIST: ["points"]
@@ -28,7 +29,7 @@ DATA_AUGMENTOR:
         - NAME: gt_sampling
           USE_ROAD_PLANE: True
           DB_INFO_PATH:
-              - kitti_dbinfos_train.pkl
+              - kitti_dbinfos_noise_train.pkl
           PREPARE: {
              filter_by_min_points: ['Car:5', 'Pedestrian:5', 'Cyclist:5'],
              filter_by_difficulty: [-1],

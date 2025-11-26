@@ -69,8 +69,10 @@ class DynamicPillarFeatureNet(nn.Module):
                     points_padded[:, :3] = points[:, :3]
 
                     if self.dataset == 'vod':
-                        points_padded[~virtual_point_mask, 3:7] = points[~virtual_point_mask, 3:7]# xyz_3 + real_4 + virtual_4 + idf_2 = 13
-                        points_padded[virtual_point_mask, 7:11] = points[virtual_point_mask, 3:7]
+                        points_padded[~virtual_point_mask, 3:15] = points[~virtual_point_mask, 3:15]# xyz_3 + real_12 + virtual_12 + idf_2 = 29
+                        points_padded[virtual_point_mask, 15:27] = points[virtual_point_mask, 3:15]
+                        # points_padded[~virtual_point_mask, 3:7] = points[~virtual_point_mask, 3:7]
+                        # points_padded[virtual_point_mask, 7:11] = points[virtual_point_mask, 3:7]
                     elif self.dataset == 'tj4d':
                         points_padded[~virtual_point_mask, 3:8] = points[~virtual_point_mask, 3:8]# xyz_3 + real_5 + virtual_5 + idf_2 = 15
                         points_padded[virtual_point_mask, 8:13] = points[virtual_point_mask, 3:8]
