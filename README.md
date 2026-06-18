@@ -5,7 +5,7 @@
 
 ## 한 줄 요약
 
-RCTrans의 메모리 query 선택(`torch.topk(cls_score, 128)`)을 **물리 기반 importance(Doppler) + 공간 diversity(MMR)**, 나아가 **학습형 supervised quality head**로 교체하는 일련의 실험. 모든 변종이 cls baseline과 **parity(NDS ≈ 0.58)**에 수렴 → **"cls-score top-K 메모리 선택은 이미 (near-)최적"이라는 구조적(intrinsic) 천장**을 세 갈래 독립 경로로 확증. 분석/negative-result 논문(Outcome B)으로 정리.
+RCTrans의 메모리 query 선택(`torch.topk(cls_score, 128)`)을 **물리 기반 importance(Doppler) + 공간 diversity(MMR)**, 나아가 **학습형 supervised quality head**로 교체하는 일련의 실험. 
 
 ## 핵심 결과
 
