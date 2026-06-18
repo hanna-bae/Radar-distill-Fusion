@@ -1,0 +1,267 @@
+--- a/rctrans_head.py (upstream liyih/RCTrans @47884e8)
++++ b/rctrans_head.py (this work: quality / quality_mmr modes)
+@@ -121,6 +121,7 @@
+                  split = 0.5,
+                  init_cfg=None,
+                  normedlinear=False,
++                 query_select=dict(mode='cls'),
+                  **kwargs):
+         # NOTE here use `AnchorFreeHead` instead of `TransformerHead`,
+         # since it brings inconvenience when the initialization of
+@@ -180,6 +181,16 @@
+         self.memory_len = memory_len
+         self.topk_proposals = topk_proposals
+         self.num_propagated = num_propagated
++        # --- physics-guided query selection (delta) ---
++        # mode: 'cls'(baseline) | 'doppler' | 'doppler_mmr' | 'mlp' | 'mlp_mmr'
++        self.query_select_cfg = query_select or dict(mode='cls')
++        self.select_mode = self.query_select_cfg.get('mode', 'cls')
++        self.select_velo_weight = self.query_select_cfg.get('velo_weight', 1.0)
++        self.select_mmr_gamma = self.query_select_cfg.get('mmr_gamma', 0.5)
++        self.select_mmr_sigma = self.query_select_cfg.get('mmr_sigma', 0.08)
++        # weight on the auxiliary objectness loss that SUPERVISES the learned
++        # quality head (only used by 'quality'/'quality_mmr' modes).
++        self.select_quality_weight = self.query_select_cfg.get('quality_weight', 2.0)
+         self.with_dn = with_dn
+         self.with_ego_pos = with_ego_pos
+         self.match_with_velo = match_with_velo
+@@ -306,6 +317,32 @@
+         if self.num_propagated > 0:
+             self.pseudo_reference_points = nn.Embedding(self.num_propagated, 3)
+ 
++        # learned importance head (only for 'mlp' selection modes; rule-based modes add no params)
++        if 'mlp' in self.select_mode:
++            self.importance_head = nn.Sequential(
++                nn.Linear(self.embed_dims, self.embed_dims // 2),
++                nn.ReLU(inplace=True),
++                nn.Linear(self.embed_dims // 2, 1),
++            )
++
++        # learned, SUPERVISED quality/objectness head (for 'quality'/'quality_mmr' modes).
++        # Its sigmoid output IS the memory-selection score AND is trained end-to-end by an
++        # auxiliary objectness loss (Hungarian-matched query -> 1, else 0). This fixes the
++        # "selection score computed but never supervised into the ranking" inconsistency that
++        # makes a hand-crafted cls+|Doppler|+MMR blend only reach parity (cf. GFL, Sparse4D-v3
++        # Quality Estimation). One branch per decoder layer for deep supervision (≈free here).
++        if 'quality' in self.select_mode:
++            self.quality_branches = nn.ModuleList([
++                nn.Sequential(
++                    Linear(self.embed_dims, self.embed_dims),
++                    nn.LayerNorm(self.embed_dims),
++                    nn.ReLU(inplace=True),
++                    Linear(self.embed_dims, 1),
++                ) for _ in range(self.num_pred)
++            ])
++            # the decoder layer whose output is propagated into the memory queue
++            self._select_layer = self.prune_number - 1
++
+         self.time_embedding = nn.Sequential(
+             nn.Linear(self.embed_dims, self.embed_dims),
+             nn.LayerNorm(self.embed_dims)
+@@ -364,6 +401,64 @@
+             self.memory_reference_point[:, :self.num_propagated]  = self.memory_reference_point[:, :self.num_propagated] + (1 - x).view(B, 1, 1) * pseudo_reference_points
+             self.memory_egopose[:, :self.num_propagated]  = self.memory_egopose[:, :self.num_propagated] + (1 - x).view(B, 1, 1, 1) * torch.eye(4, device=x.device)
+ 
++    @staticmethod
++    def _minmax(x, dim=1, eps=1e-6):
++        """Per-sample min-max normalize along `dim` to [0,1] for stable blending."""
++        mn = x.amin(dim=dim, keepdim=True)
++        mx = x.amax(dim=dim, keepdim=True)
++        return (x - mn) / (mx - mn + eps)
++
++    def compute_importance(self, rec_score, rec_velo, rec_memory):
++        """Physics-guided importance per query. (B,N,1).
++        EDA: Doppler(|v_comp|) is the valid physical foreground signal; RCS is not.
++        cls-score stays as the detection-confidence base term."""
++        if 'quality' in self.select_mode:
++            # learned, SUPERVISED objectness as the base selection score (trained, not hand-crafted)
++            imp = self.quality_branches[self._select_layer](rec_memory).sigmoid()  # (B,N,1)
++        else:
++            imp = rec_score  # (B,N,1) max sigmoid cls
++        if ('doppler' in self.select_mode) or ('mlp' in self.select_mode):
++            speed = rec_velo.norm(dim=-1, keepdim=True)                 # (B,N,1) = |predicted velocity|
++            imp = imp + self.select_velo_weight * self._minmax(speed)
++        if 'mlp' in self.select_mode:
++            imp = imp + self._minmax(self.importance_head(rec_memory))  # learned non-linear importance
++        return imp
++
++    def _mmr_select(self, imp, xy, K):
++        """Greedy MMR: importance + spatial diversity (redundancy suppression).
++        imp:(B,N) ; xy:(B,N,2) ; returns indices (B,K,1)."""
++        B, N = imp.shape
++        imp = self._minmax(imp.unsqueeze(-1), dim=1).squeeze(-1)        # (B,N) in [0,1]
++        gamma, sigma = self.select_mmr_gamma, self.select_mmr_sigma
++        out = []
++        for b in range(B):
++            p = self._minmax(xy[b].unsqueeze(0), dim=1).squeeze(0)      # (N,2) xy normalized to unit box
++            sim = torch.exp(-torch.cdist(p, p).pow(2) / (2 * sigma * sigma))  # (N,N) in (0,1]
++            red = torch.zeros(N, device=imp.device)                    # max sim to selected set
++            chosen = torch.zeros(N, dtype=torch.bool, device=imp.device)
++            sel = []
++            for _ in range(K):
++                score = (imp[b] - gamma * red).masked_fill(chosen, float('-inf'))
++                j = torch.argmax(score)
++                sel.append(j)
++                chosen[j] = True
++                red = torch.maximum(red, sim[j])
++            out.append(torch.stack(sel))
++        return torch.stack(out).unsqueeze(-1)                          # (B,K,1)
++
++    def select_memory_indices(self, rec_score, rec_velo, rec_reference_points, rec_memory):
++        """Pick topk_proposals query indices to propagate into temporal memory.
++        Returns (B,K,1) indices compatible with topk_gather."""
++        K = self.topk_proposals
++        if self.select_mode == 'cls':                                   # baseline: pure cls-score
++            _, idx = torch.topk(rec_score, K, dim=1)
++            return idx
++        imp = self.compute_importance(rec_score, rec_velo, rec_memory)
++        if not self.select_mode.endswith('mmr'):                        # importance-only
++            _, idx = torch.topk(imp, K, dim=1)
++            return idx
++        return self._mmr_select(imp.squeeze(-1), rec_reference_points[..., :2], K)  # importance + diversity
++
+     def post_update_memory(self, data, rec_ego_pose, all_cls_scores, all_bbox_preds, outs_dec, mask_dict, img_metas):
+         if self.training and mask_dict and mask_dict['pad_size'] > 0:
+             rec_reference_points = all_bbox_preds[:, :, mask_dict['pad_size']:, :3][-1]
+@@ -378,8 +473,24 @@
+             rec_score = all_cls_scores[-1].sigmoid().topk(1, dim=-1).values[..., 0:1]
+             rec_timestamp = torch.zeros_like(rec_score, dtype=torch.float64)
+         
+-        # topk proposals
+-        _, topk_indexes = torch.topk(rec_score, self.topk_proposals, dim=1)
++        # --- E6 selection-viz dump (env-guarded; capture pre-selection tensors for a few frames) ---
++        import os as _os
++        if _os.environ.get('SELDUMP') and not self.training:
++            _d = getattr(self, '_seldump', [])
++            if len(_d) < int(_os.environ.get('SELDUMP_N', '6')):
++                _fn = img_metas[0].get('filename')
++                _fn0 = _fn[0] if isinstance(_fn, (list, tuple)) and _fn else (_fn if isinstance(_fn, str) else '?')
++                _d.append(dict(token=img_metas[0].get('sample_idx', '?'),
++                               fname=_fn0, scene=img_metas[0].get('scene_token', '?'),
++                               score=rec_score.detach().float().cpu().numpy(),
++                               velo=rec_velo.detach().float().cpu().numpy(),
++                               ref=rec_reference_points.detach().float().cpu().numpy()))
++                self._seldump = _d
++                import pickle as _pk
++                _pk.dump(_d, open(_os.environ['SELDUMP'], 'wb'))
++
++        # topk proposals  (delta: cls-score top-K -> physics-guided importance+diversity selection)
++        topk_indexes = self.select_memory_indices(rec_score, rec_velo, rec_reference_points, rec_memory)
+         rec_timestamp = topk_gather(rec_timestamp, topk_indexes)
+         rec_reference_points = topk_gather(rec_reference_points, topk_indexes).detach()
+         rec_memory = topk_gather(rec_memory, topk_indexes).detach()
+@@ -733,7 +844,13 @@
+         all_cls_scores = torch.stack(outputs_classes)
+         all_bbox_preds = torch.stack(outputs_coords)
+         all_bbox_preds[..., 0:3] = (all_bbox_preds[..., 0:3] * (self.pc_range[3:6] - self.pc_range[0:3]) + self.pc_range[0:3])
+-        
++
++        # per-layer learned quality logits (supervised in loss; also drive memory selection)
++        all_quality = None
++        if 'quality' in self.select_mode:
++            all_quality = torch.stack(
++                [self.quality_branches[l](outs_dec[l]) for l in range(outs_dec.shape[0])], dim=0)  # (nb,B,Ntot,1)
++
+         # update the memory bank
+         self.post_update_memory(data, rec_ego_pose, all_cls_scores[:self.prune_number], all_bbox_preds[:self.prune_number], outs_dec[:self.prune_number], mask_dict, img_metas)
+ 
+@@ -747,13 +864,15 @@
+                 'all_cls_scores': outputs_class,
+                 'all_bbox_preds': outputs_coord,
+                 'dn_mask_dict':mask_dict,
+-
++                # drop the dn-padding prefix so quality aligns with the matched (non-dn) queries
++                'all_quality_preds': all_quality[:, :, mask_dict['pad_size']:, :] if all_quality is not None else None,
+             }
+         else:
+             outs = {
+                 'all_cls_scores': all_cls_scores,
+                 'all_bbox_preds': all_bbox_preds,
+                 'dn_mask_dict':None,
++                'all_quality_preds': all_quality,
+             }
+ 
+         return outs
+@@ -892,7 +1011,8 @@
+                     bbox_preds,
+                     gt_bboxes_list,
+                     gt_labels_list,
+-                    gt_bboxes_ignore_list=None):
++                    gt_bboxes_ignore_list=None,
++                    quality_scores=None):
+         """"Loss function for outputs from a single decoder layer of a single
+         feature level.
+         Args:
+@@ -953,9 +1073,21 @@
+ 
+         loss_cls = torch.nan_to_num(loss_cls)
+         loss_bbox = torch.nan_to_num(loss_bbox)
+-        return loss_cls, loss_bbox
+ 
+-   
++        # auxiliary objectness loss that SUPERVISES the learned quality head.
++        # Target: 1 for Hungarian-matched (foreground) queries, 0 otherwise — reuses the
++        # `labels` already produced above, so no extra matching cost.
++        if quality_scores is not None:
++            q = quality_scores.reshape(-1)
++            q_target = (labels < self.num_classes).to(q.dtype)
++            loss_quality = nn.functional.binary_cross_entropy_with_logits(
++                q, q_target, reduction='mean')
++            loss_quality = torch.nan_to_num(loss_quality)
++        else:
++            loss_quality = loss_cls.new_zeros(())
++        return loss_cls, loss_bbox, loss_quality
++
++
+     def dn_loss_single(self,
+                     cls_scores,
+                     bbox_preds,
+@@ -1065,10 +1197,16 @@
+             gt_bboxes_ignore for _ in range(num_dec_layers)
+         ]
+ 
+-        losses_cls, losses_bbox = multi_apply(
++        all_quality_preds = preds_dicts.get('all_quality_preds', None)
++        if all_quality_preds is not None:
++            all_quality_list = [all_quality_preds[i] for i in range(num_dec_layers)]
++        else:
++            all_quality_list = [None for _ in range(num_dec_layers)]
++
++        losses_cls, losses_bbox, losses_quality = multi_apply(
+             self.loss_single, all_cls_scores, all_bbox_preds,
+-            all_gt_bboxes_list, all_gt_labels_list, 
+-            all_gt_bboxes_ignore_list)
++            all_gt_bboxes_list, all_gt_labels_list,
++            all_gt_bboxes_ignore_list, all_quality_list)
+ 
+         loss_dict = dict()
+ 
+@@ -1084,6 +1222,14 @@
+             loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
+             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
+             num_dec_layer += 1
++
++        # auxiliary supervised-quality loss (per-layer deep supervision)
++        if all_quality_preds is not None:
++            loss_dict['loss_quality'] = self.select_quality_weight * losses_quality[-1]
++            num_dec_layer = 0
++            for loss_q_i in losses_quality[:-1]:
++                loss_dict[f'd{num_dec_layer}.loss_quality'] = self.select_quality_weight * loss_q_i
++                num_dec_layer += 1
+         
+         if preds_dicts['dn_mask_dict'] is not None:
+             known_labels, known_bboxs, output_known_class, output_known_coord, num_tgt = self.prepare_for_loss(preds_dicts['dn_mask_dict'])
+@@ -1107,10 +1253,10 @@
+                 num_dec_layer += 1
+                 
+         elif self.with_dn:
+-            dn_losses_cls, dn_losses_bbox = multi_apply(
++            dn_losses_cls, dn_losses_bbox, _ = multi_apply(
+                 self.loss_single, all_cls_scores, all_bbox_preds,
+-                all_gt_bboxes_list, all_gt_labels_list, 
+-                all_gt_bboxes_ignore_list)
++                all_gt_bboxes_list, all_gt_labels_list,
++                all_gt_bboxes_ignore_list, [None for _ in range(num_dec_layers)])
+             loss_dict['dn_loss_cls'] = dn_losses_cls[-1].detach()
+             loss_dict['dn_loss_bbox'] = dn_losses_bbox[-1].detach()     
+             num_dec_layer = 0

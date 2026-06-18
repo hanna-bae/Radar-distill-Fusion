@@ -1,0 +1,8 @@
+eval container 시작 (GPU 4)
+mAP: 0.5042
+mATE: 0.5375
+mASE: 0.2706
+mAOE: 0.4994
+mAVE: 0.2082
+mAAE: 0.1829
+NDS: 0.5822
